@@ -104,7 +104,7 @@ class FPN(nn.Sequential):
 class PanopticFPN(nn.Sequential):
     """
     Implementation of the architecture described in the paper
-    "Panoptic Feature Pyramid Networks" by Kirilov et al.,
+    "   " by Kirilov et al.,
     https://arxiv.com/abs/1901.02446.
 
     Takes in an n-tuple of feature maps in reverse order
