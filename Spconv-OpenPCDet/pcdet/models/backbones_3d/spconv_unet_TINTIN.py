@@ -67,10 +67,28 @@ class UNetV2(nn.Module):
             norm_fn(16),
             nn.ReLU(),
         )
+
         block = post_act_block
 
+        # processor
+
+        self.pro_conv1 = spconv.SparseSequential(
+            block(input_channels, 16, 3, norm_fn=norm_fn, padding=1, conv_type='spconv', indice_key='pro_spconv1'),
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm1', indice_key='pro_subm1'),
+        )
+
+        self.pro_conv2 = spconv.SparseSequential(
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm1', indice_key='pro_subm1'),
+        )
+
+        self.pro_conv1 = spconv.SparseSequential(
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
+        )
+
+
+        # encoder
         self.conv1 = spconv.SparseSequential(
-            block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1', ),
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
         )
 
         self.conv2 = spconv.SparseSequential(
@@ -181,27 +199,32 @@ class UNetV2(nn.Module):
         )
         x = self.conv_input(input_sp_tensor)
 
-        x_conv1 = self.conv1(x)
-        x_conv2 = self.conv2(x_conv1)
-        x_conv3 = self.conv3(x_conv2)
-        x_conv4 = self.conv4(x_conv3)
+        x_pro1 = self.pro_conv1(x)
+        x_pro2 = self.pro_conv2(x)
 
-        if self.conv_out is not None:
-            # for detection head
-            # [200, 176, 5] -> [200, 176, 2]
-            out = self.conv_out(x_conv4)
-            batch_dict['encoded_spconv_tensor'] = out
-            batch_dict['encoded_spconv_tensor_stride'] = 8
+        x_pro = x_pro1 + x_pro2 
 
-        # for segmentation head
-        # [400, 352, 11] <- [200, 176, 5]
-        x_up4 = self.UR_block_forward(x_conv4, x_conv4, self.conv_up_t4, self.conv_up_m4, self.inv_conv4)
-        # [800, 704, 21] <- [400, 352, 11]
-        x_up3 = self.UR_block_forward(x_conv3, x_up4, self.conv_up_t3, self.conv_up_m3, self.inv_conv3)
-        # [1600, 1408, 41] <- [800, 704, 21]
-        x_up2 = self.UR_block_forward(x_conv2, x_up3, self.conv_up_t2, self.conv_up_m2, self.inv_conv2)
-        # [1600, 1408, 41] <- [1600, 1408, 41]
-        x_up1 = self.UR_block_forward(x_conv1, x_up2, self.conv_up_t1, self.conv_up_m1, self.conv5)
+        # x_conv1 = self.conv1(x)
+        # x_conv2 = self.conv2(x_conv1)
+        # x_conv3 = self.conv3(x_conv2)
+        # x_conv4 = self.conv4(x_conv3)
+
+        # if self.conv_out is not None:
+        #     # for detection head
+        #     # [200, 176, 5] -> [200, 176, 2]
+        #     out = self.conv_out(x_conv4)
+        #     batch_dict['encoded_spconv_tensor'] = out
+        #     batch_dict['encoded_spconv_tensor_stride'] = 8
+
+        # # for segmentation head
+        # # [400, 352, 11] <- [200, 176, 5]
+        # x_up4 = self.UR_block_forward(x_conv4, x_conv4, self.conv_up_t4, self.conv_up_m4, self.inv_conv4)
+        # # [800, 704, 21] <- [400, 352, 11]
+        # x_up3 = self.UR_block_forward(x_conv3, x_up4, self.conv_up_t3, self.conv_up_m3, self.inv_conv3)
+        # # [1600, 1408, 41] <- [800, 704, 21]
+        # x_up2 = self.UR_block_forward(x_conv2, x_up3, self.conv_up_t2, self.conv_up_m2, self.inv_conv2)
+        # # [1600, 1408, 41] <- [1600, 1408, 41]
+        # x_up1 = self.UR_block_forward(x_conv1, x_up2, self.conv_up_t1, self.conv_up_m1, self.conv5)
 
         batch_dict['point_features'] = x_up1.features
         point_coords = common_utils.get_voxel_centers(
