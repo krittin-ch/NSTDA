@@ -81,6 +81,49 @@ class DataProcessor(object):
         data_dict['voxel_num_points'] = num_points.numpy()
         return data_dict
 
+
+    def transform_points_to_n_voxels(self, data_dict=None, config=None):
+        '''
+        return
+        size = 'size1', 'size2', ..., 'sizen'
+        data_dict['voxels'][size]: (N, 3) [x, y,] 
+        '''
+        if data_dict is None:
+            from pcdet.ops.voxel import Voxelization as VoxelGenerator
+
+            self.voxel_generators = {}
+            for i in range(1, config.Total_Variant + 1):
+                voxel_size = getattr(config, f'VOXEL_SIZE{i}')
+                voxel_generator = VoxelGenerator(
+                    voxel_size=voxel_size,
+                    point_cloud_range=self.point_cloud_range,
+                    max_num_points=config.MAX_POINTS_PER_VOXEL,
+                    max_voxels=config.MAX_NUMBER_OF_VOXELS[self.mode]
+                )
+                self.voxel_generators[f'size{i}'] = voxel_generator
+            return partial(self.transform_points_to_n_voxels, config=config)
+
+        points = data_dict['points']
+        data_dict['voxels'] = {}
+        for size, voxel_generator in self.voxel_generators.items():
+            voxel_output = voxel_generator.forward(torch.tensor(points))
+            if isinstance(voxel_output, dict):
+                voxels, coordinates, num_points = \
+                    voxel_output['voxels'], voxel_output['coordinates'], voxel_output['num_points_per_voxel']
+            else:
+                voxels, coordinates, num_points = voxel_output
+
+            if not data_dict['use_lead_xyz']:
+                voxels = voxels[..., 3:]  # remove xyz in voxels(N, 3)
+
+            data_dict['voxels'][size] = voxels.numpy()
+            data_dict['voxel_coords'][size] = coordinates.numpy()
+            data_dict['voxel_num_points'][size] = num_points.numpy()
+        return data_dict
+
+
+
+
     def sample_points(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.sample_points, config=config)
