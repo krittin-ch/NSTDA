@@ -72,18 +72,18 @@ class UNetV2(nn.Module):
 
         # processor
 
+        # first block
+        # obtain the line and surface of the point clouds
         self.pro_conv1 = spconv.SparseSequential(
             block(input_channels, 16, 3, norm_fn=norm_fn, padding=1, conv_type='spconv', indice_key='pro_spconv1'),
-            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm1', indice_key='pro_subm1'),
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm', indice_key='pro_subm1'),
         )
 
         self.pro_conv2 = spconv.SparseSequential(
-            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm1', indice_key='pro_subm1'),
+            block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm', indice_key='pro_subm1'),
         )
 
-        self.pro_conv1 = spconv.SparseSequential(
-            block(16, 16, 3, norm_fn=norm_fn, padding=1, indice_key='subm1'),
-        )
+
 
 
         # encoder
@@ -197,6 +197,7 @@ class UNetV2(nn.Module):
             spatial_shape=self.sparse_shape,
             batch_size=batch_size
         )
+
         x = self.conv_input(input_sp_tensor)
 
         x_pro1 = self.pro_conv1(x)
