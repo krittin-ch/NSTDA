@@ -8,6 +8,8 @@ import torch.nn as nn
 from ...utils import common_utils
 from .spconv_backbone import post_act_block
 
+# import my function
+from pc_vec.pointclouds_plane import fast_normal_vector_gen
 
 class SparseBasicBlock(spconv.SparseModule):
     expansion = 1
@@ -83,6 +85,7 @@ class UNetV2(nn.Module):
             block(16, 16, 3, norm_fn=norm_fn, padding=1, conv_type='subm', indice_key='pro_subm1'),
         )
 
+        self.norm_vec = fast_normal_vector_gen
 
 
 
@@ -205,6 +208,9 @@ class UNetV2(nn.Module):
 
         x_pro = x_pro1 + x_pro2 
 
+        x_norm_vec = self.norm_vec(x_pro)
+
+        x_processed = torch.concat((x_pro, x_norm_vec), dim=1)
         # x_conv1 = self.conv1(x)
         # x_conv2 = self.conv2(x_conv1)
         # x_conv3 = self.conv3(x_conv2)
