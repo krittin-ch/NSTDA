@@ -20,8 +20,12 @@ class Detector3DTemplate(nn.Module):
         self.register_buffer('global_step', torch.LongTensor(1).zero_())
 
         self.module_topology = [
-            'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
-            'backbone_2d', 'dense_head',  'point_head', 'roi_head'
+            'pfe',              # Optional for now
+            'vfe',              # Require for the first layer of network
+            'image_backbone',   # Require for encoding the image and getting the psedo point clouds
+            'backbone_3d',      # Merging
+            # 'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
+            # 'backbone_2d', 'dense_head',  'point_head', 'roi_head'
         ]
 
     @property
