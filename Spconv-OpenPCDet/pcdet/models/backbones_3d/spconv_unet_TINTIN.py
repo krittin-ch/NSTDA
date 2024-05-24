@@ -87,7 +87,7 @@ class Extract_WeightBias(spconv.SparseModule):
         out = self.relu1(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.bn2(out)uu
         out = self.relu2(out)
 
         return out
