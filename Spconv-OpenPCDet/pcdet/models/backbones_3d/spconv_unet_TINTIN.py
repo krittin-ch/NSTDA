@@ -152,29 +152,6 @@ class Extract_WeightBiasVoxel(spconv.SparseModule):
         out = self.relu2(out)
 
         return out
-    
-
-
-# class Extract_WeightBiasImage(spconv.SparseModule):
-
-#     def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
-#         super(Extract_WeightBias, self).__init__()
-
-#         self.extract_wb = Extract_WeightBiasVoxel
-
-
-    def forward(self, x):
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
-
-        return out
-    
 
 class TinNet(nn.Module):
     """
@@ -265,7 +242,11 @@ class TinNet(nn.Module):
         x_norm = x_normVec1 + x_normVec2
 
         x_norm = F.normalize(x_norm, p=2, dim=None) # p=2 L2 Normalize
-        
+        x_norm = self.pro_conv1(x_norm)
+
+        batch_dict['norm_vec_feature'] = torch.ravel(x_norm)
+        batch_dict['voxel_features'] = torch.ravel(x_pro)
+
         # batch_dict['point_features'] = x_up1.features
         # point_coords = common_utils.get_voxel_centers(
         #     x_up1.indices[:, 1:], downsample_times=1, voxel_size=self.voxel_size,
