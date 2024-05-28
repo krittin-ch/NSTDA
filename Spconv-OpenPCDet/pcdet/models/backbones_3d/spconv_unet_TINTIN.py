@@ -11,9 +11,11 @@ from .spconv_backbone import post_act_block
 
 # import my function
 from pc_vec.pointclouds_plane import fast_normal_vector_gen
+from pc_vec.extract_xyz import get_xyz
 
 # import voxel feature extraction
 from vfe import TinMeanVFE
+
 
 class SparseBasicBlock(spconv.SparseModule):
     expansion = 1
@@ -153,6 +155,40 @@ class Extract_WeightBiasVoxel(spconv.SparseModule):
 
         return out
 
+   
+
+class TinBlock(spconv.SparseModule):
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
+        super(TinBlock, self).__init__()
+
+        self.conv1 = nn.Conv3d(
+            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
+        )
+
+        self.bn1 = norm_fn(planes)
+        self.relu1 = nn.ReLU()
+
+        self.conv2 = nn.Conv3d(
+            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
+        )
+        
+        self.bn2 = norm_fn(planes)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x):
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu1(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu2(out)
+
+        return out
+
+
 class TinNet(nn.Module):
     """
     Sparse Convolution based UNet for point-wise feature learning.
@@ -197,6 +233,8 @@ class TinNet(nn.Module):
 
         self.vfe = TinMeanVFE
 
+        self.get_xyz = get_xyz
+
         self.num_point_features = 16
 
     def forward(self, batch_dict):
@@ -238,8 +276,11 @@ class TinNet(nn.Module):
 
         # normal vector path 1
         x_normVec2 = self.norm_vec2(x_pro)
+        x_normVec2 = self.vfe(x_normVec2)
 
         x_norm = x_normVec1 + x_normVec2
+
+        xy_norm, z_norm = self.get_xyz(x_norm)
 
         x_norm = F.normalize(x_norm, p=2, dim=None) # p=2 L2 Normalize
         x_norm = self.pro_conv1(x_norm)
