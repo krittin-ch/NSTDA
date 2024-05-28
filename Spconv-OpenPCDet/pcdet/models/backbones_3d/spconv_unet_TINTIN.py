@@ -16,49 +16,7 @@ from pc_vec.extract_xyz import get_xyz
 # import voxel feature extraction
 from vfe import TinMeanVFE
 
-
-class SparseBasicBlock(spconv.SparseModule):
-    expansion = 1
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
-        super(SparseBasicBlock, self).__init__()
-        self.conv1 = spconv.SubMConv3d(
-            inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False, indice_key=indice_key
-        )
-
-        self.bn1 = norm_fn(planes)
-        
-        self.relu = nn.ReLU()
-        
-        self.conv2 = spconv.SubMConv3d(
-            planes, planes, kernel_size=3, stride=1, padding=1, bias=False, indice_key=indice_key
-        )
-        
-        self.bn2 = norm_fn(planes)
-        
-        self.downsample = downsample
-        
-        self.stride = stride
-
-    def forward(self, x):
-        identity = x.features
-
-        assert x.features.dim() == 2, 'x.features.dim()=%d' % x.features.dim()
-
-        out = self.conv1(x)
-        out.features = self.bn1(out.features)
-        out.features = self.relu(out.features)
-
-        out = self.conv2(out)
-        out.features = self.bn2(out.features)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-
-        out.features += identity
-        out.features = self.relu(out.features)
-
-        return out
+# planes --> road planes use for training only
 
 
 class Extract_WeightBias(spconv.SparseModule):
@@ -91,38 +49,6 @@ class Extract_WeightBias(spconv.SparseModule):
         out = self.relu2(out)
 
         return out
-
-class Extract_WeightBias(spconv.SparseModule):
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
-        super(Extract_WeightBias, self).__init__()
-
-        self.conv1 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-
-        self.bn1 = norm_fn(planes)
-        self.relu1 = nn.ReLU()
-
-        self.conv2 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-        
-        self.bn2 = norm_fn(planes)
-        self.relu2 = nn.ReLU()
-
-    def forward(self, x):
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
-
-        return out
-    
 
 class Extract_WeightBiasVoxel(spconv.SparseModule):
 
@@ -155,38 +81,46 @@ class Extract_WeightBiasVoxel(spconv.SparseModule):
 
         return out
 
-   
+
+import torch.nn as nn
+import spconv.pytorch as spconv
 
 class TinBlock(spconv.SparseModule):
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
+    def __init__(self, inplanes, stride=1, downsample=None, indice_key=None, norm_fn=None, layers=5):
         super(TinBlock, self).__init__()
 
-        self.conv1 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
+        '''
+        Have to write config file
+        to obtain the adaptable layers
+        '''
 
-        self.bn1 = norm_fn(planes)
-        self.relu1 = nn.ReLU()
+        self.flatten = nn.Flatten()
+        self.layers = nn.ModuleList()
+        self.norm_fn = norm_fn
 
-        self.conv2 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-        
-        self.bn2 = norm_fn(planes)
-        self.relu2 = nn.ReLU()
+        # Create the sequence of dense --> softmax --> batch norm --> max pool layers
+        for _ in range(layers):
+            dense_layer = nn.Linear(inplanes, inplanes)  # Fully connected layer
+            softmax_layer = nn.Softmax(dim=-1)           # Softmax activation
+            norm_layer = norm_fn(inplanes) if norm_fn else nn.BatchNorm1d(inplanes)  # Normalization layer
+            maxpool_layer = nn.MaxPool1d(kernel_size=2, stride=2)  # Max pooling layer
+
+            self.layers.append(nn.Sequential(dense_layer, softmax_layer, norm_layer, maxpool_layer))
 
     def forward(self, x):
+        # Flatten the input features
+        out = self.flatten(x)
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
+        # Initialize a tensor to accumulate the outputs
+        accumulated_out = torch.zeros_like(out)
 
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
+        # Pass through the sequence of layers
+        for layer in self.layers:
+            out = layer(out)
+            accumulated_out += out  # Accumulate the output with skip connection
 
-        return out
+        return accumulated_out
 
 
 class TinNet(nn.Module):
@@ -235,6 +169,8 @@ class TinNet(nn.Module):
 
         self.get_xyz = get_xyz
 
+        self.block = TinBlock
+
         self.num_point_features = 16
 
     def forward(self, batch_dict):
@@ -280,13 +216,19 @@ class TinNet(nn.Module):
 
         x_norm = x_normVec1 + x_normVec2
 
-        xy_norm, z_norm = self.get_xyz(x_norm)
 
         x_norm = F.normalize(x_norm, p=2, dim=None) # p=2 L2 Normalize
         x_norm = self.pro_conv1(x_norm)
 
-        batch_dict['norm_vec_feature'] = torch.ravel(x_norm)
-        batch_dict['voxel_features'] = torch.ravel(x_pro)
+        xy_norm, z_norm = self.get_xyz(x_norm)
+
+        xy_norm = self.block(xy_norm)
+        z_norm = self.block(z_norm)
+
+
+
+        # batch_dict['norm_vec_feature'] = torch.ravel(x_norm)
+        # batch_dict['voxel_features'] = torch.ravel(x_pro)
 
         # batch_dict['point_features'] = x_up1.features
         # point_coords = common_utils.get_voxel_centers(
