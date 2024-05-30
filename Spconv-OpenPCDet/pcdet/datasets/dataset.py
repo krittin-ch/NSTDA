@@ -144,6 +144,11 @@ class DatasetTemplate(torch_data.Dataset):
         if data_dict.get('points', None) is not None:
             data_dict = self.point_feature_encoder.forward(data_dict)
 
+        # Tin Added
+        if data_dict.get('images', None) is not None:
+            data_dict = data_dict['images']
+
+
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
