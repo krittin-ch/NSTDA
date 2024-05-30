@@ -15,4 +15,5 @@ class Tin2D(nn.Module):
     def forward(self, batch_dict):
         image = batch_dict['image']
         batch_dict['image_feature'] = self.constructor(image)
+        
         return batch_dict
