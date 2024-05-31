@@ -5,6 +5,7 @@ from pcdet.ops import spconv as spconv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+# import spconv.pytorch as spconv
 
 from ...utils import common_utils
 from .spconv_backbone import post_act_block
@@ -82,8 +83,6 @@ class Extract_WeightBiasVoxel(spconv.SparseModule):
         return out
 
 
-import torch.nn as nn
-import spconv.pytorch as spconv
 
 class TinBlock(spconv.SparseModule):
 
@@ -99,10 +98,10 @@ class TinBlock(spconv.SparseModule):
         self.layers = nn.ModuleList()
         self.norm_fn = norm_fn
 
-        # Create the sequence of dense --> softmax --> batch norm --> max pool layers
+        # Create the sequence of dense --> ReLU --> batch norm --> max pool layers
         for _ in range(layers):
             dense_layer = nn.Linear(inplanes, inplanes)  # Fully connected layer
-            softmax_layer = nn.Softmax(dim=-1)           # Softmax activation
+            softmax_layer = nn.ReLU(dim=-1)           # ReLU activation
             norm_layer = norm_fn(inplanes) if norm_fn else nn.BatchNorm1d(inplanes)  # Normalization layer
             maxpool_layer = nn.MaxPool1d(kernel_size=2, stride=2)  # Max pooling layer
 

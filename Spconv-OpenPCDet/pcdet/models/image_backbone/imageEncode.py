@@ -22,7 +22,7 @@ class ImageEncode(nn.Module):
         else:
             raise ValueError(f"Unsupported model_name: {model_name}")
 
-    def preprocess_image(self, image_path):
+    def preprocess_image(self, image):
         preprocess = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -30,7 +30,6 @@ class ImageEncode(nn.Module):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        image = Image.open(image_path)
         image = preprocess(image)
         image = image.unsqueeze(0)  # Add batch dimension
         return image
