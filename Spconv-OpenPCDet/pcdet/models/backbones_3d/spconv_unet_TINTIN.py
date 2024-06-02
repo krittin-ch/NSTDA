@@ -20,68 +20,6 @@ from vfe import TinMeanVFE
 # planes --> road planes use for training only
 
 
-class Extract_WeightBias(spconv.SparseModule):
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
-        super(Extract_WeightBias, self).__init__()
-
-        self.conv1 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-
-        self.bn1 = norm_fn(planes)
-        self.relu1 = nn.ReLU()
-
-        self.conv2 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-        
-        self.bn2 = norm_fn(planes)
-        self.relu2 = nn.ReLU()
-
-    def forward(self, x):
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
-
-        return out
-
-class Extract_WeightBiasVoxel(spconv.SparseModule):
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, indice_key=None, norm_fn=None):
-        super(Extract_WeightBias, self).__init__()
-
-        self.conv1 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-
-        self.bn1 = norm_fn(planes)
-        self.relu1 = nn.ReLU()
-
-        self.conv2 = nn.Conv3d(
-            inplanes, planes, kernel_size=(64, 64, 64), stride=stride, padding=(32, 32, 32), bias=False
-        )
-        
-        self.bn2 = norm_fn(planes)
-        self.relu2 = nn.ReLU()
-
-    def forward(self, x):
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
-
-        return out
-
 
 
 class TinBlock(spconv.SparseModule):
@@ -130,7 +68,12 @@ class TinNet(nn.Module):
     """
     def __init__(self, model_cfg, input_channels, grid_size, voxel_size, point_cloud_range, **kwargs):
         super().__init__()
+
+        # Model Configuration
         self.model_cfg = model_cfg
+
+        self.layers = model_cfg.BACKBONE_3D.NAME.layers
+
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
         self.voxel_size = voxel_size
         self.point_cloud_range = point_cloud_range
@@ -160,7 +103,6 @@ class TinNet(nn.Module):
 
         # Normal Vectors
         self.norm_vec1 = fast_normal_vector_gen
-        self.extract_wb1 = Extract_WeightBiasVoxel
 
         self.norm_vec2 = fast_normal_vector_gen
 
@@ -168,7 +110,7 @@ class TinNet(nn.Module):
 
         self.get_xyz = get_xyz
 
-        self.block = TinBlock
+        self.block = TinBlock(layers=self.layers)
 
         self.num_point_features = 16
 
@@ -186,7 +128,7 @@ class TinNet(nn.Module):
         """
 
 
-        voxel_features, voxel_coords = batch_dict['voxel_features'], batch_dict['voxel_coords']
+        voxel_features, voxel_coords, voxel_num_points = batch_dict['voxel_features'], batch_dict['voxel_coords'], batch_dict['voxel_num_points']
         batch_size = batch_dict['batch_size']
         input_sp_tensor = spconv.SparseConvTensor(
             features=voxel_features,
@@ -203,7 +145,7 @@ class TinNet(nn.Module):
         x_pro = x_pro1 + x_pro2
 
         # voxel path
-        out_voxel = self.vfe(x_pro)
+        out_voxel = self.vfe(x_pro, voxel_num_points)
 
         x_normVec1 = self.norm_vec1(out_voxel)
         x_normVec1 = self.pro_conv1(x_normVec1) # should be some conv with some kernel size (but haven't thought about)
@@ -211,7 +153,7 @@ class TinNet(nn.Module):
 
         # normal vector path 1
         x_normVec2 = self.norm_vec2(x_pro)
-        x_normVec2 = self.vfe(x_normVec2)
+        x_normVec2 = self.vfe(x_normVec2, voxel_num_points)
 
         x_norm = x_normVec1 + x_normVec2
 
@@ -236,3 +178,4 @@ class TinNet(nn.Module):
         # )
         # batch_dict['point_coords'] = torch.cat((x_up1.indices[:, 0:1].float(), point_coords), dim=1)
         return batch_dict
+
