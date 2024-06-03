@@ -43,7 +43,7 @@ class ImageEncoder(nn.Module):
         image_tensor = self.preprocess_image(image)
         image_feature = self.resnet_model(image_tensor)
 
-        batch_dict['image_feature'] = image_feature
+        batch_dict['image_features'] = image_feature # [batch_size, num_channels, 7, 7]
         return batch_dict
     
 # ResNet34

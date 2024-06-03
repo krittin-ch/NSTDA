@@ -15,7 +15,7 @@ from pc_vec.pointclouds_plane import fast_normal_vector_gen
 from pc_vec.extract_xyz import get_xyz
 
 # import voxel feature extraction
-from vfe import TinMeanVFE
+from vfe import TinMeanVFE, VoxelFeatureEncoding
 
 # planes --> road planes use for training only
 
@@ -106,7 +106,8 @@ class TinNet(nn.Module):
 
         self.norm_vec2 = fast_normal_vector_gen
 
-        self.vfe = TinMeanVFE
+        self.Tinvfe = TinMeanVFE
+        self.vfe = VoxelFeatureEncoding
 
         self.get_xyz = get_xyz
 
@@ -137,6 +138,7 @@ class TinNet(nn.Module):
             batch_size=batch_size
         )
 
+        # Obtain Voxel
         x = self.conv_input(input_sp_tensor)
 
         x_pro1 = self.pro_conv1(x)
@@ -144,32 +146,28 @@ class TinNet(nn.Module):
 
         x_pro = x_pro1 + x_pro2
 
-        # voxel path
+        x_pro = F.normalize(x_pro, p=2, dim=None) # p=2 L2 Normalize
+
         out_voxel = self.vfe(x_pro, voxel_num_points)
+        # Some Conv Blocks
 
-        x_normVec1 = self.norm_vec1(out_voxel)
-        x_normVec1 = self.pro_conv1(x_normVec1) # should be some conv with some kernel size (but haven't thought about)
+        batch_dict['voxel_features'] = out_voxel
 
-
-        # normal vector path 1
-        x_normVec2 = self.norm_vec2(x_pro)
-        x_normVec2 = self.vfe(x_normVec2, voxel_num_points)
+        # Normal Vector
+        x_normVec1 = self.norm_vec1(x) # Normal Vector Path 1
+        x_normVec2 = self.norm_vec2(x_pro) # Normal Vector Path 2
 
         x_norm = x_normVec1 + x_normVec2
 
-
-        x_norm = F.normalize(x_norm, p=2, dim=None) # p=2 L2 Normalize
-        x_norm = self.pro_conv1(x_norm)
+        x_norm = F.normalize(x_norm, p=2, dim=None) # p=2       L2 Normalize
 
         xy_norm, z_norm = self.get_xyz(x_norm)
 
         xy_norm = self.block(xy_norm)
         z_norm = self.block(z_norm)
 
+        batch_dict['normal_vector_features'] = F.normalize(xy_norm*z_norm, p=2, dim=None)
 
-
-        # batch_dict['norm_vec_feature'] = torch.ravel(x_norm)
-        # batch_dict['voxel_features'] = torch.ravel(x_pro)
 
         # batch_dict['point_features'] = x_up1.features
         # point_coords = common_utils.get_voxel_centers(
