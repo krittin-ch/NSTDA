@@ -166,7 +166,8 @@ class TinNet(nn.Module):
         xy_norm = self.block(xy_norm)
         z_norm = self.block(z_norm)
 
-        batch_dict['normal_vector_features'] = F.normalize(xy_norm*z_norm, p=2, dim=None)
+        # Dimension : (X, 1)
+        batch_dict['normal_vector_features'] = F.normalize(xy_norm*z_norm, p=2, dim=None) 
 
 
         # batch_dict['point_features'] = x_up1.features
